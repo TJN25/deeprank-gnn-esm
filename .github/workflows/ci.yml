@@ -21,6 +21,9 @@ jobs:
           python-version: 3.9
           auto-activate-base: false
 
+      - name: install deeprank-gnn-esm
+        run: pip install .
+
       - name: install test dependencies
         run: pip install pytest pytest-cov coverage hypothesis
 
