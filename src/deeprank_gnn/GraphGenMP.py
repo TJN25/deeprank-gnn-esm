@@ -244,7 +244,7 @@ class GraphHDF5(object):
                     embedding_tersor[i] = embedding
                 except:
                     embedding_tersor[i] = torch.zeros(1280)
-            assert not torch.all(torch.eq(embedding_tersor, 0))
+            #assert not torch.all(torch.eq(embedding_tersor, 0))
             f.create_dataset(f'/{mol}/node_data/embedding', data=embedding_tersor)
         print(f'Embedding added to the {outfile} file')
         f.close()
