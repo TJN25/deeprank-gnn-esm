@@ -358,13 +358,13 @@ class HDF5DataSet(Dataset):
                         dtype=torch.long,
                     )
                 else:
-                   #print("WARNING: no cluster detected")
-                   pass
+                    #print("WARNING: no cluster detected")
+                    pass
+
             else:
                 #print("WARNING: no cluster detected")
                 pass
         else:
-            #print("WARNING: no cluster detected")
             pass
 
         f5.close()

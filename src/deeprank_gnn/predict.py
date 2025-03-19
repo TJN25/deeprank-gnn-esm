@@ -9,6 +9,7 @@ import warnings
 from io import TextIOWrapper
 from pathlib import Path
 import importlib.util
+from typing import List
 import argparse
 import torch
 from Bio.PDB import PDBParser, PDBIO, Structure, Model, Chain
@@ -138,83 +139,101 @@ def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
         main_fasta_fh.write(f">{root}.{chain.id}\n{sequence}\n")
 
 
-def get_embedding(fasta_file: Path, output_dir: Path) -> list[Path]:
-    """
-    Get the embedding of a protein sequence.
+# Helper function to process each batch
+def process_batch(
+    batch_idx, labels, strs, toks, model, repr_layers, output_dir, representations
+):
+    embedd_path = []
+    for i, label in enumerate(labels):
+        result = {"label": label}
+        truncate_len = min(TRUNCATION_SEQ_LENGTH, len(strs[i]))
 
-    Adapted from: <https://github.com/facebookresearch/esm/blob/d7b3331f41442ed4ffde70cb95bdd48cabcec2e9/scripts/extract.py#L63>
-    """
+        # Add representations
+        if "per_tok" in INCLUDE:
+            result["representations"] = {
+                layer: t[i, 1 : truncate_len + 1].clone()
+                for layer, t in representations.items()
+            }
+
+        # Add mean representations
+        if "mean" in INCLUDE:
+            result["mean_representations"] = {
+                layer: t[i, 1 : truncate_len + 1].mean(0).clone()
+                for layer, t in representations.items()
+            }
+
+        # Add contacts if needed
+        if "contacts" in INCLUDE:
+            result["contacts"] = out["contacts"][
+                i, :truncate_len, :truncate_len
+            ].clone()
+
+        # Save the result to file
+        output_file = output_dir / f"{label}.pt"
+        torch.save(result, output_file)
+        embedd_path.append(output_file)
+    return embedd_path
+
+
+# Helper function to get the model output
+def get_model_output(toks, model, repr_layers):
+    out = model(toks, repr_layers=repr_layers, return_contacts="contacts" in INCLUDE)
+    representations = {layer: t.cpu() for layer, t in out["representations"].items()}
+    return out, representations
+
+
+# Main function
+def get_embedding(fasta_file: Path, output_dir: Path) -> List[Path]:
+    """Generate protein sequence embeddings."""
     log.info("Generating embedding for protein sequence.")
     log.info("#" * 80)
+
+    # Load model and alphabet
     model, alphabet = pretrained.load_model_and_alphabet(ESM_MODEL)
-
     model.eval()
-
     if torch.cuda.is_available():
         model = model.cuda()
-        log.info("Transferred model to GPU")
 
+    # Prepare dataset and data loader
     dataset = FastaBatchedDataset.from_file(fasta_file)
     batches = dataset.get_batch_indices(TOKS_PER_BATCH, extra_toks_per_seq=1)
-    data_loader = torch.utils.data.DataLoader(  # type: ignore
+    data_loader = torch.utils.data.DataLoader(
         dataset,
         collate_fn=alphabet.get_batch_converter(TRUNCATION_SEQ_LENGTH),
         batch_sampler=batches,
     )
-    log.info(f"Read {fasta_file} with {len(dataset)} sequences")
 
+    # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    return_contacts = "contacts" in INCLUDE
 
-    assert all(-(model.num_layers + 1) <= i <= model.num_layers for i in REPR_LAYERS)  # type: ignore
-    repr_layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in REPR_LAYERS]  # type: ignore
+    # Define representation layers
+    repr_layers = [
+        (i + model.num_layers + 1) % (model.num_layers + 1) for i in REPR_LAYERS
+    ]
 
     embedd_path = []
     with torch.no_grad():
         for batch_idx, (labels, strs, toks) in enumerate(data_loader):
-            log.info(
-                f"Processing {batch_idx + 1} of {len(batches)} batches ({toks.size(0)} sequences)"
-            )
             if torch.cuda.is_available():
-                toks = toks.to(device="cuda", non_blocking=True)
+                toks = toks.to("cuda", non_blocking=True)
 
-            out = model(toks, repr_layers=repr_layers, return_contacts=return_contacts)
+            # Get model output and representations
+            out, representations = get_model_output(toks, model, repr_layers)
 
-            logits = out["logits"].to(device="cpu")
-            representations = {
-                layer: t.to(device="cpu") for layer, t in out["representations"].items()
-            }
-            if return_contacts:
-                contacts = out["contacts"].to(device="cpu")
-
-            for i, label in enumerate(labels):
-                output_file = output_dir / f"{label}.pt"
-                output_file.parent.mkdir(parents=True, exist_ok=True)
-                result = {"label": label}
-                truncate_len = min(TRUNCATION_SEQ_LENGTH, len(strs[i]))
-                # Call clone on tensors to ensure tensors are not views into a larger representation
-                # See https://github.com/pytorch/pytorch/issues/1995
-                if "per_tok" in INCLUDE:
-                    result["representations"] = {
-                        layer: t[i, 1 : truncate_len + 1].clone()
-                        for layer, t in representations.items()
-                    }
-                if "mean" in INCLUDE:
-                    result["mean_representations"] = {
-                        layer: t[i, 1 : truncate_len + 1].mean(0).clone()
-                        for layer, t in representations.items()
-                    }
-                # if "bos" in args.include:
-                #     result["bos_representations"] = {
-                #         layer: t[i, 0].clone() for layer, t in representations.items()
-                #     }
-                if return_contacts:
-                    result["contacts"] = contacts[i, :truncate_len, :truncate_len].clone()  # type: ignore
-
-                torch.save(
-                    result, output_file,
+            # Process the batch
+            embedd_path.extend(
+                process_batch(
+                    batch_idx,
+                    labels,
+                    strs,
+                    toks,
+                    model,
+                    repr_layers,
+                    output_dir,
+                    representations,
                 )
-                embedd_path.append(output_file)
+            )
+
     log.info("#" * 80)
     return embedd_path
 
@@ -342,7 +361,9 @@ def main():
     parser.add_argument("pdb_file", help="Path to the PDB file.")
     parser.add_argument("chain_id_1", help="First chain ID.")
     parser.add_argument("chain_id_2", help="Second chain ID.")
-    parser.add_argument("num_cores", help="Number of cores to use")
+    parser.add_argument(
+        "num_cores", type=int, help="Number of cores to use"
+    )  # Changed to int
     args = parser.parse_args()
 
     pdb_file = args.pdb_file
@@ -355,12 +376,11 @@ def main():
 
     # Copy PDB file to workspace
     src = Path(pdb_file)
-    dst = Path(workspace_path) / Path(pdb_file).name
-    shutil.copy(src, dst)
-    pdb_file = dst
+    copied_pdb_file = Path(workspace_path) / Path(pdb_file).name  # Renamed variable
+    shutil.copy(src, copied_pdb_file)
 
-    pdb_files = split_input_pdb(pdb_file)
-    num_cores = min(int(num_cores), MAX_cores, len(pdb_files))
+    pdb_files = split_input_pdb(copied_pdb_file)
+    num_cores = min(num_cores, MAX_cores, len(pdb_files))
     log.info(f"Using {num_cores} cores for processing")
 
     ## PDB to FASTA
@@ -376,7 +396,7 @@ def main():
         ## renumber PDB
         renumber_pdb(pdb_file_path=pdb_file, chain_ids=[chain_id_1, chain_id_2])
 
-        # for pdbs that not used in embed cal, copy the embed and rename the embed to aviod duplication
+        # for pdbs that were not used in embedding cal, copy the embed and rename the embed to avoid duplication
         if pdb_file != pdb_files[0]:
             for embed_chain in embed_paths:
                 pdb_name = pdb_file.stem
@@ -400,7 +420,7 @@ def main():
         chain_ids=[chain_id_1, chain_id_2],
     )
 
-    # Clean copyed embeds
+    # Clean copied embeddings
     for embed in embeds:
         embed.unlink()
 
