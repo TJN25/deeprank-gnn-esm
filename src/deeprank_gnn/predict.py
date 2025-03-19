@@ -162,12 +162,6 @@ def process_batch(
                 for layer, t in representations.items()
             }
 
-        # Add contacts if needed
-        if "contacts" in INCLUDE:
-            result["contacts"] = out["contacts"][
-                i, :truncate_len, :truncate_len
-            ].clone()
-
         # Save the result to file
         output_file = output_dir / f"{label}.pt"
         torch.save(result, output_file)
@@ -179,7 +173,7 @@ def process_batch(
 def get_model_output(toks, model, repr_layers):
     out = model(toks, repr_layers=repr_layers, return_contacts="contacts" in INCLUDE)
     representations = {layer: t.cpu() for layer, t in out["representations"].items()}
-    return out, representations
+    return representations
 
 
 # Main function
@@ -218,7 +212,7 @@ def get_embedding(fasta_file: Path, output_dir: Path) -> List[Path]:
                 toks = toks.to("cuda", non_blocking=True)
 
             # Get model output and representations
-            out, representations = get_model_output(toks, model, repr_layers)
+            representations = get_model_output(toks, model, repr_layers)
 
             # Process the batch
             embedd_path.extend(
@@ -259,7 +253,7 @@ def create_graph(pdb_path: Path, workspace_path: Path, nproc: int) -> str:
     return outfile
 
 
-def predict(input: str, workspace_path: Path, ncores) -> str:
+def predict(input: str, workspace_path: Path, ncores: int) -> str:
     """Predict the fnat of a protein complex."""
     log.info("Predicting fnat of protein complex.")
     gnn = GINet
