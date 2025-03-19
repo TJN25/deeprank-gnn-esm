@@ -253,7 +253,7 @@ def create_graph(pdb_path: Path, workspace_path: Path, nproc: int) -> str:
     return outfile
 
 
-def predict(input: str, workspace_path: Path, ncores: int) -> str:
+def predict(input_info: str, workspace_path: Path, ncores: int) -> str:
     """Predict the fnat of a protein complex."""
     log.info("Predicting fnat of protein complex.")
     gnn = GINet
@@ -269,7 +269,7 @@ def predict(input: str, workspace_path: Path, ncores: int) -> str:
     output = str(workspace_path / "GNN_esm_prediction.hdf5")
     # with nostdout():
     model = NeuralNet(
-        input,
+        input_info,
         gnn,
         device_name=device_name,
         edge_feature=edge_attr,
@@ -405,7 +405,7 @@ def main():
         pdb_path=pdb_file.parent, workspace_path=workspace_path, nproc=num_cores
     )
     ## Predict fnat
-    csv_output = predict(input=graph, workspace_path=workspace_path, ncores=num_cores)
+    csv_output = predict(input_info=graph, workspace_path=workspace_path, ncores=num_cores)
 
     ## Present the results
     parse_output(
