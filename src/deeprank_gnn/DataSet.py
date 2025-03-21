@@ -357,15 +357,6 @@ class HDF5DataSet(Dataset):
                         grp["clustering/" + self.clustering_method + "/depth_1"][()],
                         dtype=torch.long,
                     )
-                else:
-                    #print("WARNING: no cluster detected")
-                    pass
-
-            else:
-                #print("WARNING: no cluster detected")
-                pass
-        else:
-            pass
 
         f5.close()
         return data
