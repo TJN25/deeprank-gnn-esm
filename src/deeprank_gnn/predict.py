@@ -141,7 +141,7 @@ def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
 
 # Helper function to process each batch
 def process_batch(
-    batch_idx, labels, strs, toks, model, repr_layers, output_dir, representations
+    labels, strs, output_dir, representations
 ):
     embedd_path = []
     for i, label in enumerate(labels):
@@ -207,7 +207,7 @@ def get_embedding(fasta_file: Path, output_dir: Path) -> List[Path]:
 
     embedd_path = []
     with torch.no_grad():
-        for batch_idx, (labels, strs, toks) in enumerate(data_loader):
+        for _, (labels, strs, toks) in enumerate(data_loader):
             if torch.cuda.is_available():
                 toks = toks.to("cuda", non_blocking=True)
 
@@ -217,12 +217,8 @@ def get_embedding(fasta_file: Path, output_dir: Path) -> List[Path]:
             # Process the batch
             embedd_path.extend(
                 process_batch(
-                    batch_idx,
                     labels,
                     strs,
-                    toks,
-                    model,
-                    repr_layers,
                     output_dir,
                     representations,
                 )
