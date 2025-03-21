@@ -128,7 +128,7 @@ class GraphHDF5(object):
                         print(e)
                     f.close()
                     os.remove(name)
-            print("Graphs added to the HDF5 file")
+            #print("Graphs added to the HDF5 file")
 
         # add embedding to the hdf5 file
 
