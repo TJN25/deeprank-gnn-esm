@@ -11,8 +11,9 @@ from torch_geometric.data import Batch, Data
 
 
 import numpy as np
-
 from time import time
+import warnings
+warnings.filterwarnings("ignore",  category=FutureWarning)
 
 
 def plot_graph(graph, cluster):
