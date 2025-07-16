@@ -343,7 +343,6 @@ def split_input_pdb(pdb_file: Path) -> list[Path]:
     log.info(f"Processed {len(saved_files)} model(s) from {pdb_file.name}")
     return saved_files
 
-
 def main():
     """Main function."""
 
@@ -353,7 +352,7 @@ def main():
     parser.add_argument("chain_id_2", help="Second chain ID.")
     parser.add_argument(
         "num_cores", type=int, help="Number of cores to use"
-    )  # Changed to int
+    )
     args = parser.parse_args()
 
     pdb_file = args.pdb_file
@@ -366,14 +365,20 @@ def main():
 
     # Copy PDB file to workspace
     src = Path(pdb_file)
-    copied_pdb_file = Path(workspace_path) / Path(pdb_file).name  # Renamed variable
+    copied_pdb_file = Path(workspace_path) / Path(pdb_file).name
     shutil.copy(src, copied_pdb_file)
 
     pdb_files = split_input_pdb(copied_pdb_file)
     num_cores = min(num_cores, MAX_cores, len(pdb_files))
     log.info(f"Using {num_cores} cores for processing")
 
-    ## PDB to FASTA
+    embeds = []
+
+    for pdb_file in pdb_files:
+        ## Renumber PDB first!
+        renumber_pdb(pdb_file_path=pdb_file, chain_ids=[chain_id_1, chain_id_2])
+
+    ## PDB to FASTA (after renumbering)
     fasta_f = Path(workspace_path) / (pdb_files[0].stem + ".fasta")
     with open(fasta_f, "w") as f:
         pdb_to_fasta(pdb_file_path=Path(pdb_files[0]), main_fasta_fh=f)
@@ -381,16 +386,11 @@ def main():
     ## Generate embeddings
     embed_paths = get_embedding(fasta_file=fasta_f, output_dir=workspace_path)
 
-    embeds = []
     for pdb_file in pdb_files:
-        ## renumber PDB
-        renumber_pdb(pdb_file_path=pdb_file, chain_ids=[chain_id_1, chain_id_2])
-
-        # for pdbs that were not used in embedding cal, copy the embed and rename the embed to avoid duplication
+        # For pdbs that were not used in embedding cal, copy the embed and rename
         if pdb_file != pdb_files[0]:
             for embed_chain in embed_paths:
                 pdb_name = pdb_file.stem
-                # Only replace the part before the first dot in the stem (model name)
                 new_stem = pdb_name + embed_chain.stem[embed_chain.stem.find(".") :]
                 dst = embed_chain.with_name(new_stem + embed_chain.suffix)
                 shutil.copy(embed_chain, dst)
