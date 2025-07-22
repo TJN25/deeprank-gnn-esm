@@ -43,10 +43,11 @@ log.addHandler(ch)
 
 
 ESM_MODEL = "esm2_t33_650M_UR50D"
-EXPECTED_CHECKSUM = {
-    f"{ESM_MODEL}.pt": "ea9d0522b335a8778dea6535a65301f10208dece28cd5865482b0b1fc446168c",
-    f"{ESM_MODEL}-contact-regression.pt": "8ffe6edbd4173dc8d45c2cd5cb27d43aad77ec26b4c768200c58ae1f96693575",
-}
+EXPECTED_CHECKSUMS = [
+    "ea9d0522b335a8778dea6535a65301f10208dece28cd5865482b0b1fc446168c",  # model.pt
+    "8ffe6edbd4173dc8d45c2cd5cb27d43aad77ec26b4c768200c58ae1f96693575",  # regression.pt
+]
+
 
 spec = importlib.util.find_spec("deeprank_gnn")
 if spec and spec.origin:
@@ -152,39 +153,48 @@ def calculate_checksum(file_path, algo="sha256") -> str:
     return h.hexdigest()
 
 
-def download_weights(url: str, dest: str) -> None:
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-    with open(dest, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                f.write(chunk)
+def download_weights(url: str, dest: str, timeout: int = 10) -> None:
+    try:
+        response = requests.get(url, stream=True, timeout=timeout)
+        response.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+    except:
+        pass
 
 
 def fetch_weights() -> str:
     """Fetch the ESM model weights and regression weights."""
-    models = {
-        "model": {
-            "env": "WEIGHT_PATH",
-            "url": f"https://dl.fbaipublicfiles.com/fair-esm/models/{ESM_MODEL}.pt",
-            "default_filename": f"{ESM_MODEL}.pt",
-        },
-        "regression": {
-            "env": "REG_WEIGHT_PATH",
-            "url": f"https://dl.fbaipublicfiles.com/fair-esm/regression/{ESM_MODEL}-contact-regression.pt",
-            "default_filename": f"{ESM_MODEL}-contact-regression.pt",
-        },
-    }
+    models = [
+        (
+            "WEIGHT_PATH",
+            f"{ESM_MODEL}.pt",
+            f"https://dl.fbaipublicfiles.com/fair-esm/models/{ESM_MODEL}.pt",
+            "ea9d0522b335a8778dea6535a65301f10208dece28cd5865482b0b1fc446168c",
+        ),
+        (
+            "REG_WEIGHT_PATH",
+            f"{ESM_MODEL}-contact-regression.pt",
+            f"https://dl.fbaipublicfiles.com/fair-esm/regression/{ESM_MODEL}-contact-regression.pt",
+            "8ffe6edbd4173dc8d45c2cd5cb27d43aad77ec26b4c768200c58ae1f96693575",
+        ),
+    ]
 
-    for _, info in models.items():
-        path = os.getenv(info["env"])
-        if (
-            not os.path.exists(path)
-            or calculate_checksum(path) != EXPECTED_CHECKSUM[info["default_filename"]]
-        ):
-            download_weights(info["url"], path)
+    for env_var, filename, url, expected_checksum in models:
+        path = os.getenv(env_var)
+        if not path:  # catches None or empty string
+            path = filename
 
-    return models["model"]["default_filename"]
+        if not os.path.exists(path):
+            download_weights(url, path)
+
+        observed_checksum = calculate_checksum(path)
+        if observed_checksum != expected_checksum:
+            download_weights(url, path)
+
+    return f"{ESM_MODEL}.pt"
 
 
 # Helper function to process each batch
