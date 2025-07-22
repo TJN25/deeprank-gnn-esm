@@ -161,7 +161,7 @@ def download_weights(url: str, dest: str, timeout: int = 10) -> None:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
-    except:
+    except requests.RequestException:
         pass
 
 
