@@ -153,16 +153,22 @@ def calculate_checksum(file_path, algo="sha256") -> str:
     return h.hexdigest()
 
 
-def download_weights(url: str, dest: str, timeout: int = 10) -> None:
+def download_weights(url: str, dest_path: str) -> str:
     try:
-        response = requests.get(url, stream=True, timeout=timeout)
+        response = requests.get(url, stream=True)
         response.raise_for_status()
-        with open(dest, "wb") as f:
+        with open(dest_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-    except requests.RequestException:
-        pass
+                f.write(chunk)
+        if not os.path.exists(dest_path) or os.path.getsize(dest_path) == 0:
+            raise RuntimeError(
+                f"Downloaded file does not exist or is empty: {dest_path}"
+            )
+        return dest_path
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to download weights from {url}: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error when trying to download the weights: {e}")
 
 
 def fetch_weights() -> str:
