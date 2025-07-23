@@ -155,7 +155,7 @@ def calculate_checksum(file_path, algo="sha256") -> str:
 
 def download_weights(url: str, dest_path: str) -> str:
     try:
-        response = requests.get(url, stream=True)
+        esponse = requests.get(url, stream=True, timeout=10)
         response.raise_for_status()
         with open(dest_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
