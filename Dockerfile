@@ -7,11 +7,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system dependencies
 RUN apt-get update && \
   apt-get install -y --no-install-recommends \
-  build-essential=12.9ubuntu3 \
-  ca-certificates=20240203~22.04.1 \
-  git=1:2.34.1-1ubuntu1.12 \
-  wget=1.21.2-2ubuntu1.1 \
-  bzip2=1.0.8-5build1 \
+  build-essential \
+  ca-certificates \
+  git \
+  wget \
+  bzip2 \
   && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
