@@ -1,4 +1,3 @@
-
 # Command line interface for predicting fnat
 import logging
 import os
@@ -16,6 +15,7 @@ import argparse
 import torch
 from Bio.PDB import PDBParser, PDBIO, Structure, Model, Chain
 from Bio.PDB.Polypeptide import is_aa
+from Bio.Data import SCOPData
 
 from esm import FastaBatchedDataset, pretrained
 
@@ -129,20 +129,28 @@ def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
     log.info(f"Reading sequence of PDB {pdb_file_path.name}")
     parser = PDBParser()
     structure = parser.get_structure("structure", pdb_file_path)
+    three_to_one = SCOPData.protein_letters_3to1
 
     for chain_id in ["A", "B"]:
-        chain = structure[0][chain_id]
+        try:
+            chain = structure[0][chain_id]
+        except KeyError:
+            continue  # Chain might not be present
+
         sequence = ""
 
         # Get the sequence of the chain
         for residue in chain:
-            if not is_aa(residue.get_resname()):
+            if not is_aa(residue, standard=True):
                 continue
-            sequence += residue.get_resname()
+            resname = residue.get_resname()
+            try:
+                sequence += three_to_one[resname]
+            except KeyError:
+                sequence += "X"  # Unknown or modified residue
 
         # Write the sequence to a FASTA file
         root = re.findall(r"(.*).pdb", pdb_file_path.name)[0]
-
         main_fasta_fh.write(f">{root}.{chain.id}\n{sequence}\n")
 
 
@@ -477,3 +485,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
