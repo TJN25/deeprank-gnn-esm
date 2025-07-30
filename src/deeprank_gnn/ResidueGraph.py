@@ -336,37 +336,41 @@ class ResidueGraph(Graph):
             resName = node_key[2]
             resSeq = int(node_key[1])
 
-            self.nx.nodes[node_key]["chain"] = {"A": 0, "B": 1}[chainID]
-            self.nx.nodes[node_key]["pos"] = np.mean(
-                db.get("x,y,z", chainID=chainID, resSeq=resSeq), 0
-            )
-            self.nx.nodes[node_key]["type"] = self.onehot(
-                self.residue_names[resName], len(self.residue_names)
-            )
+            if resName in self.residue_names.keys():
 
-            self.nx.nodes[node_key]["charge"] = self.residue_charge[resName]
-            self.nx.nodes[node_key]["polarity"] = self.onehot(
-                self.polarity_encoding[self.residue_polarity[resName]],
-                len(self.polarity_encoding),
-            )
-
-            self.nx.nodes[node_key]["bsa"] = bsa_data[node_key]
-
-            if self.pssm is not None:
-                data = PSSM.get_pssm_data(node_key, self.pssm)
-                self.nx.nodes[node_key]["pssm"] = data
-                self.nx.nodes[node_key]["cons"] = data[self.pssm_pos[resName]]
-                self.nx.nodes[node_key]["ic"] = PSSM.get_ic_data(node_key, self.ic)
-
-            if self.biopython == True:
-
-                self.nx.nodes[node_key]["depth"] = (
-                    ResDepth[node_key] if node_key in ResDepth else 0
+                self.nx.nodes[node_key]["chain"] = {"A": 0, "B": 1}[chainID]
+                self.nx.nodes[node_key]["pos"] = np.mean(
+                    db.get("x,y,z", chainID=chainID, resSeq=resSeq), 0
                 )
-                bio_key = (chainID, resSeq)
-                self.nx.nodes[node_key]["hse"] = (
-                    HSE[bio_key] if bio_key in HSE else (0, 0, 0)
+                self.nx.nodes[node_key]["type"] = self.onehot(
+                    self.residue_names[resName], len(self.residue_names)
                 )
+
+                self.nx.nodes[node_key]["charge"] = self.residue_charge[resName]
+                self.nx.nodes[node_key]["polarity"] = self.onehot(
+                    self.polarity_encoding[self.residue_polarity[resName]],
+                    len(self.polarity_encoding),
+                )
+
+                self.nx.nodes[node_key]["bsa"] = bsa_data[node_key]
+
+                if self.pssm is not None:
+                    data = PSSM.get_pssm_data(node_key, self.pssm)
+                    self.nx.nodes[node_key]["pssm"] = data
+                    self.nx.nodes[node_key]["cons"] = data[self.pssm_pos[resName]]
+                    self.nx.nodes[node_key]["ic"] = PSSM.get_ic_data(node_key, self.ic)
+
+                if self.biopython == True:
+
+                    self.nx.nodes[node_key]["depth"] = (
+                        ResDepth[node_key] if node_key in ResDepth else 0
+                    )
+                    bio_key = (chainID, resSeq)
+                    self.nx.nodes[node_key]["hse"] = (
+                        HSE[bio_key] if bio_key in HSE else (0, 0, 0)
+                    )
+            else:
+                self.nx.remove_node(node_key)
 
     def get_edge_features(self):
         """Assigns distance feature to each edge"""
