@@ -1,12 +1,17 @@
-
 # Command line interface for predicting fnat
+import warnings
+from Bio import BiopythonWarning
+
+# Place warning filters BEFORE any Biopython imports that trigger warnings
+warnings.filterwarnings("ignore", category=BiopythonWarning)
+warnings.filterwarnings("ignore", message=".*deprecated.*")
+
 import logging
 import os
 import shutil
 import re
 import requests
 import tempfile
-import warnings
 import hashlib
 from io import TextIOWrapper
 from pathlib import Path
@@ -24,13 +29,6 @@ from deeprank_gnn.GraphGenMP import GraphHDF5
 from deeprank_gnn.NeuralNet import NeuralNet
 from deeprank_gnn.tools.hdf5_to_csv import hdf5_to_csv
 
-# Ignore some BioPython warnings
-import warnings
-from Bio import BiopythonWarning
-
-
-warnings.filterwarnings("ignore", category=BiopythonWarning)
-warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 # Configure logging
 log = logging.getLogger(__name__)
@@ -124,6 +122,34 @@ def renumber_pdb(pdb_file_path: Path, chain_ids: list) -> None:
         io.save(pdb_file)
 
 
+def three_to_one() -> dict:
+    """three_to_one mapping of 20 standard amino acids."""
+    dict_ = {
+        "ALA": "A",
+        "ARG": "R",
+        "ASN": "N",
+        "ASP": "D",
+        "CYS": "C",
+        "GLN": "Q",
+        "GLU": "E",
+        "GLY": "G",
+        "HIS": "H",
+        "ILE": "I",
+        "LEU": "L",
+        "LYS": "K",
+        "MET": "M",
+        "PHE": "F",
+        "PRO": "P",
+        "SER": "S",
+        "THR": "T",
+        "TRP": "W",
+        "TYR": "Y",
+        "VAL": "V",
+    }
+
+    return dict_
+
+
 def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
     """Convert a PDB file to a FASTA file."""
     log.info(f"Reading sequence of PDB {pdb_file_path.name}")
@@ -131,18 +157,33 @@ def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
     structure = parser.get_structure("structure", pdb_file_path)
 
     for chain_id in ["A", "B"]:
-        chain = structure[0][chain_id]
+        try:
+            chain = structure[0][chain_id]
+        except KeyError:
+            continue  # Chain might not be present
+
         sequence = ""
+        modified_residue_count = 0  # Track modified residues
 
         # Get the sequence of the chain
         for residue in chain:
-            if not is_aa(residue.get_resname()):
-                continue
-            sequence += residue.get_resname()
+            resname = residue.get_resname()
+            try:
+                res_dict = three_to_one()
+                sequence += res_dict[resname]
+            except KeyError:
+                sequence += "X"  # Unknown or modified residue
+                modified_residue_count += 1
+
+        # Add error/warning message if modified residues were found
+        if modified_residue_count > 0:
+            log.info(
+                f"{modified_residue_count} unrecognized residues found in chain {chain.id} "
+                f"of PDB {pdb_file_path.name}. Use DeepRank-GNN-esm with caution: non-standard residues are not officially supported."
+            )
 
         # Write the sequence to a FASTA file
         root = re.findall(r"(.*).pdb", pdb_file_path.name)[0]
-
         main_fasta_fh.write(f">{root}.{chain.id}\n{sequence}\n")
 
 
@@ -477,3 +518,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
