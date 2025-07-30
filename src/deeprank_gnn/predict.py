@@ -1,8 +1,8 @@
+# Command line interface for predicting fnat
 import warnings
 from Bio import BiopythonWarning
 
 # Place warning filters BEFORE any Biopython imports that trigger warnings
-warnings.filterwarnings("ignore", category=BiopythonWarning, module="Bio.Data.SCOPData")
 warnings.filterwarnings("ignore", category=BiopythonWarning)
 warnings.filterwarnings("ignore", message=".*deprecated.*")
 
@@ -21,7 +21,6 @@ import argparse
 import torch
 from Bio.PDB import PDBParser, PDBIO, Structure, Model, Chain
 from Bio.PDB.Polypeptide import is_aa
-from Bio.Data import SCOPData  # Now imported after the filter
 
 from esm import FastaBatchedDataset, pretrained
 
@@ -123,12 +122,39 @@ def renumber_pdb(pdb_file_path: Path, chain_ids: list) -> None:
         io.save(pdb_file)
 
 
+def three_to_one() -> dict:
+    """three_to_one mapping of 20 standard amino acids."""
+    dict_ = {
+        "ALA": "A",
+        "ARG": "R",
+        "ASN": "N",
+        "ASP": "D",
+        "CYS": "C",
+        "GLN": "Q",
+        "GLU": "E",
+        "GLY": "G",
+        "HIS": "H",
+        "ILE": "I",
+        "LEU": "L",
+        "LYS": "K",
+        "MET": "M",
+        "PHE": "F",
+        "PRO": "P",
+        "SER": "S",
+        "THR": "T",
+        "TRP": "W",
+        "TYR": "Y",
+        "VAL": "V",
+    }
+
+    return dict_
+
+
 def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
     """Convert a PDB file to a FASTA file."""
     log.info(f"Reading sequence of PDB {pdb_file_path.name}")
     parser = PDBParser()
     structure = parser.get_structure("structure", pdb_file_path)
-    three_to_one = SCOPData.protein_letters_3to1
 
     for chain_id in ["A", "B"]:
         try:
@@ -141,11 +167,10 @@ def pdb_to_fasta(pdb_file_path: Path, main_fasta_fh: TextIOWrapper) -> None:
 
         # Get the sequence of the chain
         for residue in chain:
-            if not is_aa(residue, standard=True):
-                continue
             resname = residue.get_resname()
             try:
-                sequence += three_to_one[resname]
+                res_dict = three_to_one()
+                sequence += res_dict[resname]
             except KeyError:
                 sequence += "X"  # Unknown or modified residue
                 modified_residue_count += 1
@@ -493,5 +518,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
