@@ -29,7 +29,8 @@ WORKDIR /opt/deeprank-gnn-esm
 COPY . .
 
 # Setup environment and install
-RUN conda env create -f environment-gpu.yml -n env && \
+RUN conda tos accept &&\
+  conda env create -f environment-gpu.yml -n env && \
   conda clean -afy
 ENV PYTHONPATH="/opt/deeprank-gnn-esm/src:$PYTHONPATH"
 
